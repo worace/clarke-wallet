@@ -1,78 +1,51 @@
 (ns clarke-wallet.core
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [reagent.core :as reagent]
+            [clarke-wallet.wallets :as w]
+            [clarke-wallet.views :as views]
+            [cljs.core.async :as a]
             [cljsjs.react]))
 
 (enable-console-print!)
 
-(defonce app-state {:wallet-key nil
-                    :wallet-addr nil
-                    :nodes #{}})
+(defonce event-channel (a/chan))
+(defonce app-state (reagent/atom {:wallets []
+                                  :current-view :main
+                                  :wallet-status :not-loaded
+                                  :nodes #{{:host "159.203.206.49" :port 3000} {:host "159.203.206.63" :port 3000}}}))
 
-(def wallet-dir "/var/lib/clarke-coin/wallets")
-
-(defn main-page
+(defn ui
   []
-  [:div "Hello Pizza!"])
+  (case (:current-view @app-state)
+    (views/main @app-state event-channel)))
+
+(defn event-received [{event :event data :data :as e}]
+  (case event
+    :wallets-loaded (if (empty? (:wallets @app-state))
+                      (swap! app-state assoc :wallet-status :empty)
+                      (swap! app-state assoc :wallets-loaded :loaded))
+    :wallet-loaded (do (swap! app-state update :wallets conj data)
+                       (swap! app-state assoc :wallet-status :loaded))
+    :create-wallet (swap! app-state assoc :generating-wallet true)
+    (println "Unknown event type:" e)))
+
+(defn run-event-loop [event-chan]
+  (go-loop []
+      (when-let [event (a/<! event-chan)]
+        (println (event-received event))
+        (println "GOT EVENT" event))
+      (println "state" @app-state)
+      (recur)))
 
 (defn mount-root
   []
-  (reagent/render [main-page] (.getElementById js/document "app")))
+  (reagent/render [ui] (.getElementById js/document "app")))
 
 (defn init!
   []
-  (println "HI")
-  (mount-root))
-
-(def node-rsa (js/require "node-rsa"))
-(def fs (js/require "fs"))
-(def wallet-der (atom nil))
-
-(.readFile fs
-           "/home/worace/.wallet.der"
-           "utf8"
-           (fn [err data]
-             (reset! wallet-der data)
-             (-> (doto (node-rsa) (.importKey @wallet-der "pkcs8"))
-                 (.sign (js/Buffer. "pizza") "base64"))))
-
-;; (def keypair
-;;   (doto (node-rsa) (.importKey @wallet-der "pkcs8")))
-
-;; (.sign keypair (js/Buffer. "pizza") "base64")
-
-;; (.sign (doto (node-rsa)
-;;          (.importKey @wallet-der "pkcs8")) (js/Buffer. "pizza") "base64")
-
-;; Booting
-;; Read files in wallet dir
-;; if none, prompt to create
-;; connect to DNSServer to find available nodes
-;; fetch balance for wallet addr
-
-
-;; function getTestPersonaLoginCredentials(callback) {
-
-;;     return http.get({
-;;         host: 'personatestuser.org',
-;;         path: '/email'
-;;     }, function(response) {
-;;         // Continuously update stream with data
-;;         var body = '';
-;;         response.on('data', function(d) {
-;;             body += d;
-;;         });
-;;         response.on('end', function() {
-
-;;             // Data reception is done, do whatever with it!
-;;             var parsed = JSON.parse(body);
-;;             callback({
-;;                 email: parsed.email,
-;;                 password: parsed.pass
-;;             });
-;;         });
-;;     });
-
-;; },
+  (run-event-loop event-channel)
+  (mount-root)
+  (w/load-wallets event-channel))
 
 (def http (js/require "http"))
 
@@ -93,4 +66,4 @@
             (.on response "end" (fn []
                                   (cb (read-json (apply str @body)))))))))
 
-(http-get "dns1.clarkecoin.org" "/api/peers" println)
+;; (http-get "dns1.clarkecoin.org" "/api/peers" println)

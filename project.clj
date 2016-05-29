@@ -6,8 +6,9 @@
 
   :source-paths ["src/cljs"]
 
-  :dependencies [[org.clojure/clojure "1.7.0"]
-                 [org.clojure/clojurescript "1.7.228"]
+  :dependencies [[org.clojure/clojure "1.8.0"]
+                 [org.clojure/clojurescript "1.8.51"]
+                 [org.clojure/core.async "0.2.374"]
                  [cljsjs/react "0.13.3-1"]
                  [cljsjs/nodejs-externs "1.0.4-1"]
                  [reagent "0.5.1"]]
