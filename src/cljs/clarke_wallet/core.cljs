@@ -10,7 +10,7 @@
 (enable-console-print!)
 
 (defonce event-channel (a/chan))
-(defonce app-state (reagent/atom {:wallets []
+(defonce app-state (reagent/atom {:wallets {}
                                   :current-view :main
                                   :current-wallet nil
                                   :wallet-status :not-loaded
@@ -21,14 +21,34 @@
   (case (:current-view @app-state)
     (views/main @app-state event-channel)))
 
+(defn some-node []
+  (if (empty? (:nodes @app-state))
+    nil
+   (rand-nth (into [] (:nodes @app-state)))))
+
+(defn refresh-wallet-balance [wallet]
+  (go (if-let [n (some-node)]
+        (swap! app-state
+               assoc-in
+               [:wallets (:name wallet) :balance]
+               (->> wallet
+                    :address
+                    (http/wallet-balance n)
+                    (a/<!)
+                    :body
+                    :payload
+                    :balance)))))
+
 (defn event-received [{event :event data :data :as e}]
   (case event
     :wallets-loaded (if (empty? (:wallets @app-state))
                       (swap! app-state assoc :wallet-status :empty)
                       (swap! app-state assoc :wallet-status :ready))
-    :wallet-loaded (do (swap! app-state update :wallets conj data)
-                       (swap! app-state assoc :wallet-status :ready))
-    :wallet-selected (swap! app-state assoc :current-wallet data)
+    :wallet-loaded (do (swap! app-state update :wallets assoc (:name data) data)
+                       (swap! app-state assoc :wallet-status :ready)
+                       (refresh-wallet-balance data))
+    :wallet-selected (do (swap! app-state assoc :current-wallet (:name data))
+                         (refresh-wallet-balance data))
     :create-wallet (do (println "WILL MAKE WALLET")
                        (swap! app-state assoc :wallet-status :generating)
                        (println "SET GENERATING")
