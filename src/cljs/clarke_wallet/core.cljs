@@ -19,6 +19,22 @@
                                   :wallet-status :not-loaded
                                   :nodes #{}}))
 
+(defn read-json [string] (js->clj (.parse js/JSON string)))
+(defn write-json [value] (.stringify js/JSON (clj->js value)))
+
+(def home-dir (-> js/process .-env .-HOME))
+(def clarke-coin-dir (str home-dir "/.clarke-coin"))
+(def address-book-path (str clarke-coin-dir "/addresses.json"))
+
+(defn write-file [path string]
+  (let [c (a/chan)]
+    (.writeFile
+     fs
+     path
+     string
+     (fn [err] (when-not (nil? err) (a/put! c err))))
+    c))
+
 (defn ui
   []
   (case (:current-view @app-state)
@@ -42,6 +58,12 @@
                     :payload
                     :balance)))))
 
+(defn store-address [addr]
+  (go (swap! app-state assoc-in [:address-book (:name addr)] addr)
+      (if-let [e (a/<! (write-file address-book-path
+                                   (write-json (:address-book @app-state))))]
+        (println "Error writing address book:" e))))
+
 (defn event-received [{event :event data :data :as e}]
   (case event
     :wallets-loaded (if (empty? (:wallets @app-state))
@@ -52,11 +74,10 @@
                        (refresh-wallet-balance data))
     :wallet-selected (do (swap! app-state assoc :current-wallet (:name data))
                          (refresh-wallet-balance data))
-    :create-wallet (do (println "WILL MAKE WALLET")
-                       (swap! app-state assoc :wallet-status :generating)
-                       (println "SET GENERATING")
-                       (w/make-wallet data event-channel)
-                       (println "FINISHED GO block"))
+    :store-address (store-address data)
+    :delete-address (swap! app-state update :address-book dissoc (:name data))
+    :create-wallet (do (swap! app-state assoc :wallet-status :generating)
+                       (w/make-wallet data event-channel))
     (println "Unknown event type:" e)))
 
 (defn run-event-loop [event-chan]
@@ -75,12 +96,6 @@
   (go (doseq [p (:body (a/<! (http/fetch-nodes)))]
         (swap! app-state update :nodes conj p))))
 
-(defn read-json [string] (js->clj (.parse js/JSON string)))
-
-(def home-dir (-> js/process .-env .-HOME))
-(def clarke-coin-dir (str home-dir "/.clarke-coin"))
-(def address-book-path (str clarke-coin-dir "/addresses.json"))
-
 (defn read-file [path]
   (let [c (a/chan)]
     (.readFile
@@ -92,10 +107,18 @@
          (a/close! c))))
     c))
 
+(defn keyword-keys [some-map]
+  (->> some-map
+       (map (fn [[k v]] [(keyword k) v]))
+       (into {})))
+
 (defn read-address-book []
   (let [c (a/chan)]
     (go (a/put! c (if-let [val (a/<! (read-file address-book-path))]
-                    val
+                    (reduce (fn [r [k nested-map]]
+                              (assoc r k (keyword-keys nested-map)))
+                            {}
+                            (read-json val))
                     {})))
     c))
 
