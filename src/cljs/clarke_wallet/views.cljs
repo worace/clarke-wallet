@@ -51,7 +51,24 @@
     [:h2 "Connected Nodes"]
     [:ul (map (fn [n] [:li (str n)]) (:nodes app-state))]])
 
+(defn address-li [app-state events [name addr]]
+  (println name)
+  (println addr)
+  [:li
+   [:p (str "Name: " name)]
+   [:p (str "Address: " (apply str (take 40 addr)))]]
+  )
+
+(defn address-book [app-state events]
+  (println "addr book" (:address-book app-state))
+  [:div
+   [:h2 "Saved Addresses"]
+   (into [:ul] (map (partial address-li app-state events)
+                    (:address-book app-state)))
+   ])
+
 (defn main [app-state events]
   [:div
    (wallets app-state events)
-   (node-list app-state events)])
+   (node-list app-state events)
+   (address-book app-state events)])
