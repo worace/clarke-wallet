@@ -44,7 +44,7 @@
                              [lein-cljfmt "0.4.1"]
                              [lein-figwheel "0.5.0-6"]]}
 
-             :production {:cljsbuild {:builds {:app {:compiler {:optimizations :advanced
+             :production {:cljsbuild {:builds {:app {:compiler {:optimizations :simple
                                                                 :main          "clarke-wallet.prod"
                                                                 :parallel-build true
                                                                 :cache-analysis false
