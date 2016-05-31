@@ -16,6 +16,7 @@
                                   :current-view :main
                                   :address-book {}
                                   :current-wallet nil
+                                  :pending-payment nil
                                   :wallet-status :not-loaded
                                   :nodes #{}}))
 
@@ -58,6 +59,14 @@
                     :payload
                     :balance)))))
 
+(defn request-unsigned-txn [payment-info]
+  (when-let [n (some-node)]
+    (println "will fetch txn from node" n)
+    (go (let [r (a/<! (http/request-unsigned-txn n payment-info))]
+          (if (:success r)
+            (swap! app-state assoc :pending-payment (get-in r [:body :payload]))
+            (println "Error getting txn: " r))))))
+
 (defn store-address [addr]
   (go (swap! app-state assoc-in [:address-book (:name addr)] addr)
       (if-let [e (a/<! (write-file address-book-path
@@ -78,6 +87,7 @@
     :delete-address (swap! app-state update :address-book dissoc (:name data))
     :create-wallet (do (swap! app-state assoc :wallet-status :generating)
                        (w/make-wallet data event-channel))
+    :request-unsigned-txn (request-unsigned-txn data)
     (println "Unknown event type:" e)))
 
 (defn run-event-loop [event-chan]
@@ -85,7 +95,7 @@
       (when-let [event (a/<! event-chan)]
         (println "Received event" event)
         (event-received event)
-      (println "state" @app-state)
+      #_(println "state" @app-state)
       (recur))))
 
 (defn mount-root

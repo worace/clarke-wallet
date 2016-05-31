@@ -19,3 +19,10 @@
 
 (defn fetch-nodes []
   (http/get "http://dns1.clarkecoin.org/api/peers"))
+
+(defn request-unsigned-txn [node {:keys [from-address to-address amount fee]}]
+  (http/post (url node "unsigned_payment_transactions")
+             {:json-params {:from_address from-address
+                            :to_address to-address
+                            :amount (js/parseInt (or amount 0))
+                            :fee (js/parseInt (or fee 0))}}))

@@ -1,5 +1,7 @@
 (ns clarke-wallet.views
   (:require [cljs.core.async :as a]
+            [clarke-wallet.http :as http]
+            [cljs.pprint]
             [reagent.core :as r]))
 
 (def clipboard (js/require "clipboard"))
@@ -95,7 +97,6 @@
                           (reset! addr-der ""))}]]))
 
 (defn address-book [app-state events]
-  (println "addr book" (:address-book app-state))
   [:div
    [:h2 "Saved Addresses"]
    (into [:ul] (map (partial address-li app-state events)
@@ -103,10 +104,63 @@
    [:hr]
    (new-address-form app-state events)])
 
+(defn etv [e] (-> e .-target .-value))
+
+(defn new-payment-form [app-state events]
+  (let [payment (r/atom {})
+        unsigned-txn (r/atom nil)]
+    [(fn []
+      [:div
+       [:h2 "Make a Payment"]
+       [:div
+        [:p
+         [:label "Sending Address:"]
+         [:select
+          {:on-change (fn [e] (swap! payment assoc :from-address (etv e)))}
+          (map (fn [w]
+                 ^{:key w} [:option {:value (:address w)} (:name w)])
+               (vals (:wallets app-state)))]]
+        [:p
+         [:label "Receiving Address:"]
+         [:select
+          {:on-change (fn [e] (swap! payment assoc :to-address (etv e)))}
+          (map (fn [w]
+                 ^{:key w} [:option {:value (:address w)} (:name w)])
+               (vals (:address-book app-state)))]]
+        [:p
+         [:label "Amount:"]
+         [:input {:type "text" :on-change (fn [e] (swap! payment assoc :amount (etv e)))}]]
+        [:p
+         [:label "Transaction Fee:"]
+         [:input {:type "text" :on-change (fn [e] (swap! payment assoc :fee (etv e)))}]]
+        [:input {:type "button" :value "Request Unsigned Payment"
+                 :on-click (fn [e] (a/put! events {:event :request-unsigned-txn :data @payment}))}]
+        [:pre (with-out-str (cljs.pprint/pprint @payment))]
+        ]
+       ])]))
+
+(defn pending-payment-confirmation [app-state events]
+  (if-let [p (:pending-payment app-state)]
+    [:div
+     [:h3 "Confirm Payment:"]
+     [:pre (with-out-str (cljs.pprint/pprint p))]
+     #_[:input {:type "button" :value "Request Unsigned Payment"
+                 :on-click (fn [e] (a/put! events {:event :request-unsigned-txn :data @payment}))}]]))
+
+(defn payment [app-state events]
+  [:div
+   (if-let [p (:pending-payment app-state)]
+     (pending-payment-confirmation app-state events)
+     (new-payment-form app-state events))]
+  )
+
 (defn main [app-state events]
   [:div
+   (payment app-state events)
+   [:hr]
    (wallets app-state events)
    [:hr]
    (node-list app-state events)
    [:hr]
-   (address-book app-state events)])
+   (address-book app-state events)
+   ])
