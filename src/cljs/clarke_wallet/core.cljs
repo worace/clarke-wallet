@@ -17,6 +17,7 @@
                                   :current-view :main
                                   :address-book {}
                                   :current-wallet nil
+                                  :alerts []
                                   :pending-payment nil
                                   :wallet-status :not-loaded
                                   :nodes #{}}))
@@ -86,9 +87,18 @@
 (defn sign-and-submit-payment [payment]
   ;; use wallet to sign (pass it all the wallets so it can find matching one)
   ;; use http to submit
-  (let [signed (w/sign-payment (:from-key payment)
-                               (:transaction payment))]
-    (println signed)))
+  (if-let [n {:host "159.203.206.49" :port 3000}]
+    (let [signed (w/sign-payment (:from-key payment)
+                                 (:transaction payment))]
+      (println signed)
+      (println "***********")
+      (go (let [r (a/<! (http/submit-signed-payment n signed))]
+            (println "Submitted payment and received resp:")
+            (println r)
+            (if (:success r)
+              (do (swap! app-state dissoc :pending-payment)
+                  (swap! app-state update :alerts conj "Payment Accepted!"))
+              (swap! app-state update :alerts conj "Payment Rejected!")))))))
 
 (defn event-received [{event :event data :data :as e}]
   (case event

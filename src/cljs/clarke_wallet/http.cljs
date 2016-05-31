@@ -26,3 +26,7 @@
                             :to_address to-address
                             :amount (js/parseInt (or amount 0))
                             :fee (js/parseInt (or fee 0))}}))
+
+(defn submit-signed-payment [node txn]
+  (http/post (url node "pending_transactions")
+             {:json-params txn}))

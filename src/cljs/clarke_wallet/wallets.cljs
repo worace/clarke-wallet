@@ -94,4 +94,4 @@
            :inputs
            (->> (:inputs txn)
                 (map (fn [i] (assoc i :signature sig)))
-                (vector)))))
+                (vec)))))

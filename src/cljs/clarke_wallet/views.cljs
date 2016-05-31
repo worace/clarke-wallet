@@ -162,6 +162,9 @@
 
 (defn main [app-state events]
   [:div
+   (if-not (empty? (seq (:alerts app-state)))
+     [:div (map #([:p %]) (seq (:alerts app-state)))])
+   [:hr]
    (payment app-state events)
    [:hr]
    (wallets app-state events)
