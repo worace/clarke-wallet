@@ -63,3 +63,35 @@
                      :data {:address (public-der kp)
                             :key kp
                             :name file-name}})))
+
+
+(defn cat-keys
+  "take a map and a vector of keys and create a concatenated
+   string of the value for each key"
+  [keys m]
+  (apply str (map (partial get m) keys)))
+
+(def input-signable (partial cat-keys [:source-hash :source-index]))
+(def input-hashable (partial cat-keys [:source-hash :source-index]))
+(def output-signable (partial cat-keys [:amount :address]))
+(def output-hashable output-signable)
+
+(defn txn-signable [txn]
+  (apply str (concat (map input-signable (:inputs txn))
+                     (map output-signable (:outputs txn))
+                     [(:min-height txn) (:timestamp txn)])))
+
+(defn sign [key string]
+  (.toString (.sign key (js/Buffer. string) "buffer" "base64")
+             "base64"))
+
+(defn sign-payment [key-map txn]
+  (println "SIGNABLE")
+  (println (txn-signable txn))
+  (println (sign (:key key-map) (txn-signable txn)))
+  (let [sig (sign (:key key-map) (txn-signable txn))]
+    (assoc txn
+           :inputs
+           (->> (:inputs txn)
+                (map (fn [i] (assoc i :signature sig)))
+                (vector)))))

@@ -6,6 +6,7 @@
             [clarke-wallet.http :as http]
             [cljs.core.async :as a]
             [cljsjs.react]))
+
 (def fs (js/require "fs"))
 (def fse (js/require "fs-extra"))
 
@@ -62,9 +63,18 @@
 (defn request-unsigned-txn [payment-info]
   (when-let [n (some-node)]
     (println "will fetch txn from node" n)
-    (go (let [r (a/<! (http/request-unsigned-txn n payment-info))]
+    (println "got payment info " payment-info)
+    (go (let [from-address (:address (:from-key payment-info))
+              req-info (-> payment-info
+                           (dissoc :from-key)
+                           (assoc :from-address from-address))
+              r (a/<! (http/request-unsigned-txn n req-info))]
           (if (:success r)
-            (swap! app-state assoc :pending-payment (get-in r [:body :payload]))
+            (swap! app-state
+                   assoc
+                   :pending-payment
+                   {:transaction (get-in r [:body :payload])
+                    :from-key (:from-key payment-info)})
             (println "Error getting txn: " r))))))
 
 (defn store-address [addr]
@@ -72,6 +82,13 @@
       (if-let [e (a/<! (write-file address-book-path
                                    (write-json (:address-book @app-state))))]
         (println "Error writing address book:" e))))
+
+(defn sign-and-submit-payment [payment]
+  ;; use wallet to sign (pass it all the wallets so it can find matching one)
+  ;; use http to submit
+  (let [signed (w/sign-payment (:from-key payment)
+                               (:transaction payment))]
+    (println signed)))
 
 (defn event-received [{event :event data :data :as e}]
   (case event
@@ -88,6 +105,7 @@
     :create-wallet (do (swap! app-state assoc :wallet-status :generating)
                        (w/make-wallet data event-channel))
     :request-unsigned-txn (request-unsigned-txn data)
+    :sign-and-submit-payment (sign-and-submit-payment data)
     (println "Unknown event type:" e)))
 
 (defn run-event-loop [event-chan]

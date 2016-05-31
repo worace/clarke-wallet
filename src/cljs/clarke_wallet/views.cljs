@@ -107,7 +107,10 @@
 (defn etv [e] (-> e .-target .-value))
 
 (defn new-payment-form [app-state events]
-  (let [payment (r/atom {})
+  (let [wallets (vals (:wallets app-state))
+        addresses (vals (:address-book app-state))
+        payment (r/atom {:from-key (first wallets)
+                         :to-address (:address (first addresses))})
         unsigned-txn (r/atom nil)]
     [(fn []
       [:div
@@ -116,17 +119,20 @@
         [:p
          [:label "Sending Address:"]
          [:select
-          {:on-change (fn [e] (swap! payment assoc :from-address (etv e)))}
+          {:on-change (fn [e] (swap! payment
+                                     assoc
+                                     :from-key
+                                     (get-in app-state [:wallets (etv e)])))}
           (map (fn [w]
-                 ^{:key w} [:option {:value (:address w)} (:name w)])
-               (vals (:wallets app-state)))]]
+                 ^{:key w} [:option {:value (:name w)} (:name w)])
+               wallets)]]
         [:p
          [:label "Receiving Address:"]
          [:select
           {:on-change (fn [e] (swap! payment assoc :to-address (etv e)))}
           (map (fn [w]
                  ^{:key w} [:option {:value (:address w)} (:name w)])
-               (vals (:address-book app-state)))]]
+               addresses)]]
         [:p
          [:label "Amount:"]
          [:input {:type "text" :on-change (fn [e] (swap! payment assoc :amount (etv e)))}]]
@@ -144,8 +150,8 @@
     [:div
      [:h3 "Confirm Payment:"]
      [:pre (with-out-str (cljs.pprint/pprint p))]
-     #_[:input {:type "button" :value "Request Unsigned Payment"
-                 :on-click (fn [e] (a/put! events {:event :request-unsigned-txn :data @payment}))}]]))
+     [:input {:type "button" :value "Confirm and Submit"
+                 :on-click (fn [e] (a/put! events {:event :sign-and-submit-payment :data p}))}]]))
 
 (defn payment [app-state events]
   [:div
